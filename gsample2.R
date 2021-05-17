@@ -81,10 +81,11 @@ xmod = stan_glm(X ~ lag_A + lag_X, family = gaussian(), data = bd)
 ymod = stan_glm(Y ~ A + X, family = gaussian(), data = bd)
 
 # Y ^ 11
-nrep = 2
+nrep = 30
 pp.X11 = posterior_predict(xmod, newdata = data.frame(lag_A = 1, lag_X = bd$lag_X), draws = nrep)
 pp.X10 = posterior_predict(xmod, newdata = data.frame(lag_A = 0, lag_X = bd$lag_X), draws = nrep)
 
+# these will be 500 * nrep long
 pp.Y11 = posterior_predict(ymod, newdata = data.frame(A = 1, X = array(t(pp.X11))), draws = nrep)
 pp.Y00 = posterior_predict(ymod, newdata = data.frame(A = 0, X = array(t(pp.X10))), draws = nrep)
 
@@ -92,12 +93,13 @@ pp.Y00 = posterior_predict(ymod, newdata = data.frame(A = 0, X = array(t(pp.X10)
 mean(pp.Y11 - pp.Y00)
 
 plot.df = data.frame(Y = c( array(t(pp.Y11)), array(t(pp.Y00)) ) ,
-                     keep = rep(c(1,0), each = 500) ) %>% filter(keep == 1)
+                     keep = rep( c(1, rep(0,nrep-1))    , each = 500) ) %>% filter(keep == 1)
 
 plot.df$nrep = rep(1:(nrep*2), each = 500)
 plot.df$int = c( rep("11", 500 * nrep), rep("00", 500 * nrep))
 
 #Plot.
-ggplot(plot.df, aes(x = Y, group = nrep)) + geom_density(alpha = 0.5, aes(color=int, alpha = 0.1)) + theme_minimal()
+ggplot(plot.df, aes(x = Y, group = nrep)) + geom_density(aes(color=int), alpha = 0) + 
+  theme_minimal() + theme(legend.position = "none")
 
 plot.df %>% group_by(int) %>% summarise(m = mean(Y))
