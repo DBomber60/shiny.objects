@@ -1,0 +1,72 @@
+---
+title: "sim.5.28"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## One outcome/ One predictor
+
+One binary predictor SSVS
+
+$$p(\theta, \lambda, \beta \vert \textbf{Data})$$
+
+\begin{align}
+p(\theta \vert \gamma) &\sim \text{Beta}(\gamma + 1, 2 - \gamma) \\
+p(\gamma \vert \beta, \theta) &= \frac{\theta p(\beta \vert \gamma=1)}{\theta p(\beta \vert \gamma=1)+(1-\theta) p(\beta \vert \gamma=0)} \\
+&= \frac{\theta N(0,\nu_1)}{\theta N(0,\nu_1) + (1-\theta) N(0, \nu_0)} \\
+p(\beta \vert \gamma) &\sim N( \mathbf{M}^{-1} X^\top y, \sigma^2 \mathbf{M}^{-1})
+\end{align}
+
+where $$\mathbf{M} (X^\top X + D(\lambda)^{-1})$$
+
+```{r}
+# simulate data
+n = 500
+# binary predictor
+A = rbinom(n, 1, prob = 0.4)
+y = rnorm(n, mean = 0.5 * A)
+
+
+# MCMC
+# to do: figure out the regularization
+
+
+nIter = 1000
+
+nu_1 = 5
+nu_0 = 0.5
+
+gamma.samples = array(0, dim = nIter)
+theta.samples = array(0.5, dim = nIter)
+beta.samples = array(0, dim = nIter)
+
+for(it in 2:nIter) {
+  # sample theta
+  theta.samples[it] = rbeta(1, shape1 = gamma.samples[it-1] + 1  ,shape2 = 2 - gamma.samples[it-1])
+  
+  # sample gamma
+  pg = (theta.samples[it] * dnorm(beta.samples[it-1],nu_1))/( (theta.samples[it] * dnorm(beta.samples[it-1],nu_1)) + (1-theta.samples[it]) * dnorm(beta.samples[it-1],nu_0)) 
+  
+  gamma.samples[it] = rbinom(1, 1, prob = pg)
+  
+  # sample beta
+  m = sum(A) + ifelse(gamma.samples[it] == 1, 1/nu_1, 1/nu_0)
+  beta.samples[it] = rnorm(1, mean = m^-1 * t(A) %*% y, sd = 1/m )
+  
+}
+
+
+hist(beta.samples[2:nIter])
+hist(gamma.samples)
+
+```
+
+
+
+
+

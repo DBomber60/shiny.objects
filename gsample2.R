@@ -2,7 +2,6 @@ library(tidyverse)
 library(gfoRmula)
 library(rstanarm)
 # generate some data to validate the gfoRmula function
-
 # TODO: can we compute the true Y^{11} for this example??
 
 set.seed(1)
@@ -93,13 +92,18 @@ pp.Y00 = posterior_predict(ymod, newdata = data.frame(A = 0, X = array(t(pp.X10)
 mean(pp.Y11 - pp.Y00)
 
 plot.df = data.frame(Y = c( array(t(pp.Y11)), array(t(pp.Y00)) ) ,
-                     keep = rep( c(1, rep(0,nrep-1))    , each = 500) ) %>% filter(keep == 1)
+                     keep = rep( c(1, rep(0,nrep-1))    , each = n) ) %>% filter(keep == 1)
 
 plot.df$nrep = rep(1:(nrep*2), each = 500)
 plot.df$int = c( rep("11", 500 * nrep), rep("00", 500 * nrep))
 
 #Plot.
-ggplot(plot.df, aes(x = Y, group = nrep)) + geom_density(aes(color=int), alpha = 0) + 
-  theme_minimal() + theme(legend.position = "none")
+cbp1 <- c("#56B4E9", "#009E73",
+          "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+ggplot(plot.df, aes(x = Y, group = nrep)) + geom_density(aes(color=int)) + 
+  theme_minimal() + theme(legend.position = "none") + scale_colour_manual(values=cbp1)
 
 plot.df %>% group_by(int) %>% summarise(m = mean(Y))
+
+# now show posterior predictive under different assumption

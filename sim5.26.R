@@ -47,10 +47,10 @@ head(dat)
 # covparams = list(covmodels=c(X ~ lag1_X + lag1_A,
 #                              Z ~ lag1_Z,
 #                              A ~ X + Z))
-# ymodel = Y ~ A 
+# ymodel = Y ~ A + X
 # intvars = list('A', 'A')
 # interventions = list( list(c(static, rep(0,2))),
-#                       list(c(static, c(1,1))) )  
+#                       list(c(static, c(1,1))) )
 # int_descript = c('Never', 'Always')
 # 
 # b = gformula_continuous_eof(dat, id=id, time_name = time_name, covnames = covnames, covtypes = covtypes,
@@ -65,6 +65,9 @@ head(dat)
 
 
 ############# Bayesian version: true G ##################
+
+ey00 = -0.01581408
+ey11 = -1.60739165
 
 
 bd = dat %>% group_by(id) %>% mutate(lag_A = lag(A), lag_X = lag(X), lag_Z = lag(Z)) %>% na.omit
@@ -96,8 +99,9 @@ cbp1 <- c("#56B4E9", "#009E73",
 
 p1 = ggplot(plot.df, aes(x = Y, group = nrep)) + geom_density(aes(color=int)) + 
   theme_minimal() + theme(legend.position = "none") + scale_colour_manual(values=cbp1) + 
-  ggtitle(TeX("Distribution of $Y^{11}$ (Blue) and $Y^{00}$ (Green) under $G_1$")) +
-  ylab(TeX("p($y^g | Data, G_1$)")) + xlim(-15,15)
+  ggtitle(TeX("Distribution of $Y^{00}$ (Blue) and $Y^{11}$ (Green) under $G_1$")) +
+  ylab(TeX("p($y^g | Data, G_1$)")) + xlim(-15,15) + 
+  geom_vline(xintercept = c(ey00,ey11), color = cbp1[1:2])
 
 
 
@@ -131,8 +135,9 @@ cbp1 <- c("#56B4E9", "#009E73",
 
 p2 = ggplot(plot.df, aes(x = Y, group = nrep)) + geom_density(aes(color=int)) + 
   theme_minimal() + theme(legend.position = "none") + scale_colour_manual(values=cbp1) + 
-  ggtitle(TeX("Distribution of $Y^{11}$ (Blue) and $Y^{00}$ (Green) under $G_2$")) +
-  ylab(TeX("p($y^g | Data, G_2$)")) + + xlim(-15,15)
+  ggtitle(TeX("Distribution of $Y^{00}$ (Blue) and $Y^{11}$ (Green) under $G_2$")) +
+  ylab(TeX("p($y^g | Data, G_2$)")) + xlim(-15,15) +
+  geom_vline(xintercept = c(ey00,ey11), color = cbp1[1:2])
 
 
 
@@ -168,12 +173,13 @@ cbp1 <- c("#56B4E9", "#009E73",
 
 p3 = ggplot(plot.df, aes(x = Y, group = nrep)) + geom_density(aes(color=int)) + 
   theme_minimal() + theme(legend.position = "none") + scale_colour_manual(values=cbp1) + 
-  ggtitle(TeX("Distribution of $Y^{11}$ (Blue) and $Y^{00}$ (Green) under $G_3$")) +
-  ylab(TeX("p($y^g | Data, G_3$)")) + xlim(-15,15)
+  ggtitle(TeX("Distribution of $Y^{00}$ (Blue) and $Y^{11}$ (Green) under $G_3$")) +
+  ylab(TeX("p($y^g | Data, G_3$)")) + xlim(-15,15) +
+  geom_vline(xintercept = c(ey00,ey11), color = cbp1[1:2])
 
 
 gg = arrangeGrob(p1, p2, p3, nrow = 3)
-ggsave("grobbed.pdf", gg)
+ggsave("grobbed.pdf", gg, width = 6, height = 7)
 
 # add in the 'true' expectations
 

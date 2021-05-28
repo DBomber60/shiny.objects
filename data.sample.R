@@ -67,7 +67,7 @@ zlong <- NULL
 counter <- 1
 for (j in 0:1) {  # treatment time 1  
   for (k in 0:1) { # treatment time 2
-    py = plogis(-1 + effect * (j + k) + x[(j+1), , (ncov+1):(2*ncov)] * d + 1.5 * u)
+    py = plogis(-1 + effect * (j + k) + x[(j+1), , (ncov+1):(2*ncov)] * d + u)
     y[j+1,k+1, ] <- (runif(ntot) < py)
     ylong <- c(ylong, y[cbind(j+1,k+1,1:ntot)])
     zlong <- c(zlong, rep(j+k, ntot))
