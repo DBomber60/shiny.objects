@@ -11,26 +11,37 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## One outcome/ One predictor
 
+\begin{align}
+\sigma^2 &\sim \text{IG}(1/2,1/2) \\
+P(\theta) &= {1}(0<\theta<1) \\
+p(\lambda=1 \vert \theta) &= \theta \\
+p(\beta \vert \lambda) &= \lambda \mathcal{ N}(0,\nu_1) + (1-\lambda)\mathcal{N}(0,\nu_0) \\
+p(y \vert \beta, \mathbf{A}_0) &= \mathcal{N}(\mathbf{A_0} \beta, \sigma^2 \mathbf{I}) \\
+\end{align}
+
+
+
 One binary predictor SSVS
 
-$$p(\theta, \lambda, \beta \vert \textbf{Data})$$
+$$p(\theta, \lambda, \beta, \sigma^2 \vert \textbf{Data})$$
 
 \begin{align}
 p(\theta \vert \gamma) &\sim \text{Beta}(\gamma + 1, 2 - \gamma) \\
 p(\gamma \vert \beta, \theta) &= \frac{\theta p(\beta \vert \gamma=1)}{\theta p(\beta \vert \gamma=1)+(1-\theta) p(\beta \vert \gamma=0)} \\
 &= \frac{\theta N(0,\nu_1)}{\theta N(0,\nu_1) + (1-\theta) N(0, \nu_0)} \\
-p(\beta \vert \gamma) &\sim N( \mathbf{M}^{-1} X^\top y, \sigma^2 \mathbf{M}^{-1})
+p(\beta \vert \gamma) &\sim N( (\sigma^{-2}) \mathbf{M}^{-1} X^\top y, \mathbf{M}^{-1}) \\
+p(\sigma^2 \vert \cdot) &\sim \text{IG}((n+1)/2, (\text{ss}+1)/2)
 \end{align}
 
-where $$\mathbf{M} (X^\top X + D(\lambda)^{-1})$$
+where $$\mathbf{M} =(\sigma^{-2}X^\top X + D(\lambda)^{-1})$$
 
 ```{r}
 # simulate data
+set.seed(1)
 n = 500
 # binary predictor
 A = rbinom(n, 1, prob = 0.4)
 y = rnorm(n, mean = 0.5 * A)
-
 
 # MCMC
 # to do: figure out the regularization
@@ -39,31 +50,36 @@ y = rnorm(n, mean = 0.5 * A)
 nIter = 1000
 
 nu_1 = 5
-nu_0 = 0.5
+nu_0 = 0.2
 
 gamma.samples = array(0, dim = nIter)
 theta.samples = array(0.5, dim = nIter)
 beta.samples = array(0, dim = nIter)
+sigsq.samples = array(1, dim = nIter)
 
 for(it in 2:nIter) {
   # sample theta
   theta.samples[it] = rbeta(1, shape1 = gamma.samples[it-1] + 1  ,shape2 = 2 - gamma.samples[it-1])
   
   # sample gamma
-  pg = (theta.samples[it] * dnorm(beta.samples[it-1],nu_1))/( (theta.samples[it] * dnorm(beta.samples[it-1],nu_1)) + (1-theta.samples[it]) * dnorm(beta.samples[it-1],nu_0)) 
+  pg = (theta.samples[it] * dnorm(beta.samples[it-1],mean = 0, sd = nu_1))/( (theta.samples[it] * dnorm(beta.samples[it-1],mean = 0, sd = nu_1)) + (1-theta.samples[it]) * dnorm(beta.samples[it-1],mean = 0, sd = nu_0)) 
   
   gamma.samples[it] = rbinom(1, 1, prob = pg)
   
   # sample beta
-  m = sum(A) + ifelse(gamma.samples[it] == 1, 1/nu_1, 1/nu_0)
-  beta.samples[it] = rnorm(1, mean = m^-1 * t(A) %*% y, sd = 1/m )
+  m = (sum(A)/sigsq.samples[it-1] + ifelse(gamma.samples[it] == 1, 1/nu_1, 1/nu_0))
+  beta.samples[it] = rnorm(1, mean = m^-1/sigsq.samples[it-1] * t(A) %*% y, sd = sqrt(1/m) )
+  
+  # sample sigsq
+  ss = sum ( (y - beta.samples[it] * A)^2 )
+  sigsq.samples[it] = 1/rgamma(1, shape = (n+1)/2, rate = (ss + 1)/2  )
   
 }
 
+summary(lm(y~A))
 
 hist(beta.samples[2:nIter])
 hist(gamma.samples)
-
 ```
 
 
