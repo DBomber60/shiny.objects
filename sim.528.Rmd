@@ -12,15 +12,17 @@ library(mvtnorm)
 
 ## One outcome/ One predictor
 
+Assume we have $p$ covariates, $(X_{jt}$ $j=1,\ldots,p$, $t=0,1)$ , measured before $A_0$ ($t=0$) and also before $A_1$ ($t=1$). Suppose that treatment decisions depend on all covariates and direct effects of treatment on each covariate are unknown. Each element of $X_{jt}$ is sampled from a normal distribution.
+
 \begin{align}
 \sigma^2 &\sim \text{IG}(1/2,1/2) \\
 P(\theta) &= {1}(0<\theta<1) \\
 p(\gamma_i=1 \vert \theta) &= \theta \\
 p(\beta_i \vert \gamma_i) &= \gamma_i \mathcal{ N}(0,\nu_1) + (1-\gamma_i)\mathcal{N}(0,\nu_0) \\
-p(\mathbf{y} \vert \boldsymbol{\beta}, \mathbf{X}) &= \mathcal{N}(\mathbf{X} \beta, \sigma^2 \mathbf{I}) \\
+p(\mathbf{x_{j1}} \vert \boldsymbol{\beta}, \mathbf{X}) &= \mathcal{N}(\mathbf{X} \beta, \sigma^2 \mathbf{I}) \\
 \end{align}
 
-One binary predictor SSVS
+The design matrix $\mathbf{X}$ consists of the previous measurement of $\mathbf{x}_{i1}$ as well as the previous treatment, $\mathbf{A}_0$.
 
 $$p(\theta, \gamma, \beta, \sigma^2 \vert \textbf{Data})$$
 
@@ -58,25 +60,19 @@ Y = rnorm(n, mean = 0.7 * X2 - A2 + u)
 dat = data.frame(Z1, Z2, X1, X2, A1, A2, Y)
 ```
 
-```{r}
-# gammas for Z2, X2 
-# gammas for Y
-
-# theta (same for all)
-
-# sample gamma for each covariate
-
-# sample beta for each
-# input: old parameter values (theta, gamma, beta, sigsq), data
-# output: new samples
+```{r gibbs sampling fn}
+# Gibbs sampler for new parameter values
+# input: old parameter values (theta, gamma, beta, sigsq), data (design, response)
+# output: list of new sampled values for each parameter
 
 sample.new = function(theta.old, gamma.old, beta.old, sigsq.old, design, resp) {
+  
   # sample new theta
+  # assumpion: U(0,1) prior on theta/ binomial distribution on gamma (beta - binomial)
   theta.new = rbeta(1, shape1 = sum(gamma.old) + 1  ,shape2 = p - sum(gamma.old) + 1)
   
   # sample new gamma 
-  # assumption: independent elements, nu_0, nu_1
-  
+  # assumption: independent elements, fixed nu_0, nu_1
   p = ncol(design)
   pg = rep(0,p) # hold the gamma probabilities
   
@@ -86,18 +82,17 @@ sample.new = function(theta.old, gamma.old, beta.old, sigsq.old, design, resp) {
     pg[pred] = a/(a+b)
   }
   
-  gamma.new = rbinom(p, 1, prob = pg)
+  gamma.new = rbinom(p, 1, prob = pg) # now, sample based on posterior probabilities
   
   # sample new beta
+  # assume scale mixture prior and normal likelihood for response with sigma = sigma^2 * I
   M = (t(design) %*% design)*sigsq.old^-1 + diag(ifelse(gamma.new == 1, 1/nu_1, 1/nu_0)) 
-  #print(M)
   Minv = solve(M)
-  
   meanvec = sigsq.old^-1 * Minv %*% t(design) %*% resp
   beta.new = rmvnorm(1, mean = meanvec, sigma = Minv)
   
   # sample new sigsq
-  # assumptions: IG(.5, .5) prior
+  # assumptions: IG(.5, .5) prior on sigsq
   ss = sum ( (resp - design %*% array(beta.new, dim=p) )^2 )
   n = length(resp)
   sigsq.new = rgamma(1, (n+1)/2, (ss+1)/2)
@@ -110,10 +105,42 @@ sample.new = function(theta.old, gamma.old, beta.old, sigsq.old, design, resp) {
   
   
 }
+```
 
+```{r mcmc over structure}
+
+nIter = 1000
+
+nu_1 = 5
+nu_0 = 0.4
+
+# array of parameters for each intermediate variable
+# theta (1)/ gamma (p)/ beta (p)/ sigsq (1)
+
+params = array(.1, dim = c(nIter, 1 + p + p + 1))
+
+
+for(it in 2:nIter) {
+  # sample theta
+  
+  new.params = sample.new(theta.old = params[it-1, 1],
+                          gamma.old = params[it-1, 2:(p+1)],
+                          beta.old = params[it-1, (p+2):(2*p+1)],
+                          sigsq.old = params[it-1, 2*p+2],
+                          design = cbind(X1, A1),
+                          resp = X2)
+  
+  params[it, 1] = new.params$theta.new
+  params[it, 2:(p+1)] = new.params$gamma.new
+  params[it, (p+2):(2*p+1)] = new.params$beta.new
+  params[it, 2*p+2] = new.params$sigsq.new
+
+}
 
 
 ```
+
+
 
 
 ```{r}
