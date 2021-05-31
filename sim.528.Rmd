@@ -15,26 +15,24 @@ library(mvtnorm)
 \begin{align}
 \sigma^2 &\sim \text{IG}(1/2,1/2) \\
 P(\theta) &= {1}(0<\theta<1) \\
-p(\lambda=1 \vert \theta) &= \theta \\
-p(\beta \vert \lambda) &= \lambda \mathcal{ N}(0,\nu_1) + (1-\lambda)\mathcal{N}(0,\nu_0) \\
-p(y \vert \beta, \mathbf{A}_0) &= \mathcal{N}(\mathbf{A_0} \beta, \sigma^2 \mathbf{I}) \\
+p(\gamma_i=1 \vert \theta) &= \theta \\
+p(\beta_i \vert \gamma_i) &= \gamma_i \mathcal{ N}(0,\nu_1) + (1-\gamma_i)\mathcal{N}(0,\nu_0) \\
+p(\mathbf{y} \vert \boldsymbol{\beta}, \mathbf{X}) &= \mathcal{N}(\mathbf{X} \beta, \sigma^2 \mathbf{I}) \\
 \end{align}
-
-
 
 One binary predictor SSVS
 
-$$p(\theta, \lambda, \beta, \sigma^2 \vert \textbf{Data})$$
+$$p(\theta, \gamma, \beta, \sigma^2 \vert \textbf{Data})$$
 
 \begin{align}
-p(\theta \vert \gamma) &\sim \text{Beta}(\gamma + 1, 2 - \gamma) \\
-p(\gamma \vert \beta, \theta) &= \frac{\theta p(\beta \vert \gamma=1)}{\theta p(\beta \vert \gamma=1)+(1-\theta) p(\beta \vert \gamma=0)} \\
+p(\theta \vert \gamma) &\sim \text{Beta}(\sum_i \gamma_i + 1, p - \sum_i \gamma_i + 1) \\
+p(\gamma_i \vert \beta, \theta) &= \frac{\theta p(\beta \vert \gamma=1)}{\theta p(\beta \vert \gamma=1)+(1-\theta) p(\beta \vert \gamma=0)} \\
 &= \frac{\theta N(0,\nu_1)}{\theta N(0,\nu_1) + (1-\theta) N(0, \nu_0)} \\
 p(\beta \vert \gamma) &\sim N( (\sigma^{-2}) \mathbf{M}^{-1} X^\top y, \mathbf{M}^{-1}) \\
 p(\sigma^2 \vert \cdot) &\sim \text{IG}((n+1)/2, (\text{ss}+1)/2)
 \end{align}
 
-where $$\mathbf{M} =(\sigma^{-2}X^\top X + D(\lambda)^{-1})$$
+where $$\mathbf{M} =(\sigma^{-2}X^\top X + D(\gamma)^{-1})$$
 
 
 ```{r simulate data}
@@ -61,6 +59,64 @@ dat = data.frame(Z1, Z2, X1, X2, A1, A2, Y)
 ```
 
 ```{r}
+# gammas for Z2, X2 
+# gammas for Y
+
+# theta (same for all)
+
+# sample gamma for each covariate
+
+# sample beta for each
+# input: old parameter values (theta, gamma, beta, sigsq), data
+# output: new samples
+
+sample.new = function(theta.old, gamma.old, beta.old, sigsq.old, design, resp) {
+  # sample new theta
+  theta.new = rbeta(1, shape1 = sum(gamma.old) + 1  ,shape2 = p - sum(gamma.old) + 1)
+  
+  # sample new gamma 
+  # assumption: independent elements, nu_0, nu_1
+  
+  p = ncol(design)
+  pg = rep(0,p) # hold the gamma probabilities
+  
+  for(pred in 1:p) {
+    a = (theta.new * dnorm(beta.old[pred],mean = 0, sd = nu_1))
+    b = (1-theta.new) * dnorm(beta.old[pred],mean = 0, sd = nu_0)
+    pg[pred] = a/(a+b)
+  }
+  
+  gamma.new = rbinom(p, 1, prob = pg)
+  
+  # sample new beta
+  M = (t(design) %*% design)*sigsq.old^-1 + diag(ifelse(gamma.new == 1, 1/nu_1, 1/nu_0)) 
+  #print(M)
+  Minv = solve(M)
+  
+  meanvec = sigsq.old^-1 * Minv %*% t(design) %*% resp
+  beta.new = rmvnorm(1, mean = meanvec, sigma = Minv)
+  
+  # sample new sigsq
+  # assumptions: IG(.5, .5) prior
+  ss = sum ( (resp - design %*% array(beta.new, dim=p) )^2 )
+  n = length(resp)
+  sigsq.new = rgamma(1, (n+1)/2, (ss+1)/2)
+  
+  
+  return(list(theta.new=theta.new, 
+              gamma.new=gamma.new, 
+              beta.new=beta.new,
+              sigsq.new=sigsq.new))
+  
+  
+}
+
+
+
+```
+
+
+```{r}
 
 # tweak this to take multiple predictors (or one)
 
@@ -80,37 +136,55 @@ nIter = 1000
 nu_1 = 5
 nu_0 = 0.4
 
-gamma.samples = array(0, dim = c(nIter,p))
 theta.samples = array(0.5, dim = nIter)
+gamma.samples = array(0, dim = c(nIter,p))
 beta.samples = array(0, dim = c(nIter,p))
 sigsq.samples = array(1, dim = nIter)
 
 for(it in 2:nIter) {
   # sample theta
-  theta.samples[it] = rbeta(1, shape1 = sum(gamma.samples[it-1,]) + 1  ,shape2 = p - sum(gamma.samples[it-1,]) + 1 )
   
-  # sample gamma
-  pg = rep(0,p) # hold the gamma probabilities
+  new.params = sample.new(theta.samples[it-1],
+                          gamma.samples[it-1,],
+                          beta.samples[it-1,],
+                          sigsq.samples[it-1],
+                          design = X,
+                          resp = y)
   
-  for(pred in 1:p) {
-    
-    a = (theta.samples[it] * dnorm(beta.samples[it-1,p],mean = 0, sd = nu_1))
-    b = (1-theta.samples[it]) * dnorm(beta.samples[it-1,p],mean = 0, sd = nu_0)
-    pg[pred] = a/(a+b)
-    
-  }
-  
-  gamma.samples[it,] = rbinom(p, 1, prob = pg)
-  
-  # sample beta
-  M =  t(X) %*% X * ( sigsq.samples[it-1]^(-1) ) + diag ( ifelse(gamma.samples[it,] == 1, 1/nu_1, 1/nu_0)) 
-  beta.samples[it,] = rmvnorm(1, mean = sigsq.samples[it-1]^(-1) * solve(M) %*% t(X) %*% y, sigma = solve(M) )
-  
-  # sample sigsq
-  ss = sum ( (y - X %*% beta.samples[it,])^2 )
-  sigsq.samples[it] = 1/rgamma(1, shape = (n+1)/2, rate = (ss + 1)/2  )
+  theta.samples[it] = new.params$theta.new
+  gamma.samples[it,] = new.params$gamma.new
+  beta.samples[it,] = new.params$beta.new
+  sigsq.samples[it] = new.params$sigsq.new
   
 }
+
+
+# for(it in 2:nIter) {
+#   # sample theta
+#   theta.samples[it] = rbeta(1, shape1 = sum(gamma.samples[it-1,]) + 1  ,shape2 = p - sum(gamma.samples[it-1,]) + 1 )
+#   
+#   # sample gamma
+#   pg = rep(0,p) # hold the gamma probabilities
+#   
+#   for(pred in 1:p) {
+#     
+#     a = (theta.samples[it] * dnorm(beta.samples[it-1,p],mean = 0, sd = nu_1))
+#     b = (1-theta.samples[it]) * dnorm(beta.samples[it-1,p],mean = 0, sd = nu_0)
+#     pg[pred] = a/(a+b)
+#     
+#   }
+#   
+#   gamma.samples[it,] = rbinom(p, 1, prob = pg)
+#   
+#   # sample beta
+#   M =  t(X) %*% X * ( sigsq.samples[it-1]^(-1) ) + diag ( ifelse(gamma.samples[it,] == 1, 1/nu_1, 1/nu_0)) 
+#   beta.samples[it,] = rmvnorm(1, mean = sigsq.samples[it-1]^(-1) * solve(M) %*% t(X) %*% y, sigma = solve(M) )
+#   
+#   # sample sigsq
+#   ss = sum ( (y - X %*% beta.samples[it,])^2 )
+#   sigsq.samples[it] = 1/rgamma(1, shape = (n+1)/2, rate = (ss + 1)/2  )
+#   
+# }
 
 summary(lm(y~X))
 
