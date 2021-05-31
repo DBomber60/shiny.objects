@@ -112,7 +112,7 @@ sample.new = function(theta.old, gamma.old, beta.old, sigsq.old, design, resp) {
 nIter = 1000
 
 nu_1 = 5
-nu_0 = 0.4
+nu_0 = 0.2
 
 # array of parameters for each intermediate variable
 # theta (1)/ gamma (p)/ beta (p)/ sigsq (1)
@@ -150,14 +150,16 @@ for(it in 2:nIter) {
   params[2, it, 2:(p+1)] = new.params$gamma.new
   params[2, it, (p+2):(2*p+1)] = new.params$beta.new
   params[2, it, 2*p+2] = new.params$sigsq.new
-
+  
 }
-
-
 
 ```
 
 
+```{r}
+gams = data.frame(params[1,-1,2:3])
+gams %>% group_by(X1, X2) %>% summarise(n=n()) %>% arrange(desc(n))
+```
 
 
 ```{r}
