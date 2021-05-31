@@ -117,25 +117,42 @@ nu_0 = 0.4
 # array of parameters for each intermediate variable
 # theta (1)/ gamma (p)/ beta (p)/ sigsq (1)
 
-params = array(.1, dim = c(nIter, 1 + p + p + 1))
+params = array(.1, dim = c(2, nIter, 1 + p + p + 1))
 
 
 for(it in 2:nIter) {
   # sample theta
   
-  new.params = sample.new(theta.old = params[it-1, 1],
-                          gamma.old = params[it-1, 2:(p+1)],
-                          beta.old = params[it-1, (p+2):(2*p+1)],
-                          sigsq.old = params[it-1, 2*p+2],
+  
+  
+  ############## sample X's #####################
+  new.params = sample.new(theta.old = params[1, it-1, 1],
+                          gamma.old = params[1, it-1, 2:(p+1)],
+                          beta.old = params[1, it-1, (p+2):(2*p+1)],
+                          sigsq.old = params[1, it-1, 2*p+2],
                           design = cbind(X1, A1),
                           resp = X2)
   
-  params[it, 1] = new.params$theta.new
-  params[it, 2:(p+1)] = new.params$gamma.new
-  params[it, (p+2):(2*p+1)] = new.params$beta.new
-  params[it, 2*p+2] = new.params$sigsq.new
+  params[1, it, 1] = new.params$theta.new
+  params[1, it, 2:(p+1)] = new.params$gamma.new
+  params[1, it, (p+2):(2*p+1)] = new.params$beta.new
+  params[1, it, 2*p+2] = new.params$sigsq.new
+  
+  ############## sample Z's #####################
+  new.params = sample.new(theta.old = params[2, it-1, 1],
+                        gamma.old = params[2, it-1, 2:(p+1)],
+                        beta.old = params[2, it-1, (p+2):(2*p+1)],
+                        sigsq.old = params[2, it-1, 2*p+2],
+                        design = cbind(Z1, A1),
+                        resp = Z2)
+  
+  params[2, it, 1] = new.params$theta.new
+  params[2, it, 2:(p+1)] = new.params$gamma.new
+  params[2, it, (p+2):(2*p+1)] = new.params$beta.new
+  params[2, it, 2*p+2] = new.params$sigsq.new
 
 }
+
 
 
 ```
@@ -221,6 +238,7 @@ hist(gamma.samples[,1])
 
 open questions
 - multiple time points "rules"
+- good choice of hyperparameters
 
 
 
