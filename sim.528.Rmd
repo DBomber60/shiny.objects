@@ -7,6 +7,7 @@ output:
 
 ```{r setup, include=FALSE, echo=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(mvtnorm)
 ```
 
 ## One outcome/ One predictor
@@ -35,54 +36,90 @@ p(\sigma^2 \vert \cdot) &\sim \text{IG}((n+1)/2, (\text{ss}+1)/2)
 
 where $$\mathbf{M} =(\sigma^{-2}X^\top X + D(\lambda)^{-1})$$
 
+
+```{r simulate data}
+### simulate data 
+### 2 covariates, A_0 has a direct effect on one but not the other
+### y depends on the last measured treatment and X1
+
+set.seed(3)
+n = 1000
+u = rnorm(n, mean = 0, sd = 2)
+Z1 = rnorm(n)
+X1 = rnorm(n)
+
+A1 = rbinom(n, 1, prob = plogis(Z1 + X1)) # higher probability of treatment when X's are >
+
+Z2 = rnorm(n, mean = 0.8 * Z1 + u)
+X2 = rnorm(n, mean = 0.7 * X1 - A1 + u) # responds to treatment
+
+A2 = rbinom(n, 1, prob = plogis(Z2 + X2)) # higher probability of treatment when X's are >
+
+Y = rnorm(n, mean = 0.7 * X2 - A2 + u)
+
+dat = data.frame(Z1, Z2, X1, X2, A1, A2, Y)
+```
+
 ```{r}
+
+# tweak this to take multiple predictors (or one)
+
 # simulate data
 set.seed(1)
 n = 500
 # binary predictor
-A = rbinom(n, 1, prob = 0.4)
-y = rnorm(n, mean = 0.5 * A)
+X = cbind( rbinom(n, 1, prob = 0.4), rnorm(n) )
+beta.true = c(0.2, 1)
+p = length(beta.true)
+y = rnorm(n, mean = X %*% beta.true)
 
 # MCMC
-# to do: figure out the regularization
-
 
 nIter = 1000
 
 nu_1 = 5
-nu_0 = 0.2
+nu_0 = 0.4
 
-gamma.samples = array(0, dim = nIter)
+gamma.samples = array(0, dim = c(nIter,p))
 theta.samples = array(0.5, dim = nIter)
-beta.samples = array(0, dim = nIter)
+beta.samples = array(0, dim = c(nIter,p))
 sigsq.samples = array(1, dim = nIter)
 
 for(it in 2:nIter) {
   # sample theta
-  theta.samples[it] = rbeta(1, shape1 = gamma.samples[it-1] + 1  ,shape2 = 2 - gamma.samples[it-1])
+  theta.samples[it] = rbeta(1, shape1 = sum(gamma.samples[it-1,]) + 1  ,shape2 = p - sum(gamma.samples[it-1,]) + 1 )
   
   # sample gamma
-  pg = (theta.samples[it] * dnorm(beta.samples[it-1],mean = 0, sd = nu_1))/( (theta.samples[it] * dnorm(beta.samples[it-1],mean = 0, sd = nu_1)) + (1-theta.samples[it]) * dnorm(beta.samples[it-1],mean = 0, sd = nu_0)) 
+  pg = rep(0,p) # hold the gamma probabilities
   
-  gamma.samples[it] = rbinom(1, 1, prob = pg)
+  for(pred in 1:p) {
+    
+    a = (theta.samples[it] * dnorm(beta.samples[it-1,p],mean = 0, sd = nu_1))
+    b = (1-theta.samples[it]) * dnorm(beta.samples[it-1,p],mean = 0, sd = nu_0)
+    pg[pred] = a/(a+b)
+    
+  }
+  
+  gamma.samples[it,] = rbinom(p, 1, prob = pg)
   
   # sample beta
-  m = (sum(A)/sigsq.samples[it-1] + ifelse(gamma.samples[it] == 1, 1/nu_1, 1/nu_0))
-  beta.samples[it] = rnorm(1, mean = m^-1/sigsq.samples[it-1] * t(A) %*% y, sd = sqrt(1/m) )
+  M =  t(X) %*% X * ( sigsq.samples[it-1]^(-1) ) + diag ( ifelse(gamma.samples[it,] == 1, 1/nu_1, 1/nu_0)) 
+  beta.samples[it,] = rmvnorm(1, mean = sigsq.samples[it-1]^(-1) * solve(M) %*% t(X) %*% y, sigma = solve(M) )
   
   # sample sigsq
-  ss = sum ( (y - beta.samples[it] * A)^2 )
+  ss = sum ( (y - X %*% beta.samples[it,])^2 )
   sigsq.samples[it] = 1/rgamma(1, shape = (n+1)/2, rate = (ss + 1)/2  )
   
 }
 
-summary(lm(y~A))
+summary(lm(y~X))
 
-hist(beta.samples[2:nIter])
-hist(gamma.samples)
+hist(beta.samples[2:nIter,2])
+hist(gamma.samples[,1])
 ```
 
-
+open questions
+- multiple time points "rules"
 
 
 
