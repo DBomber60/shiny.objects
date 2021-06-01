@@ -10,6 +10,13 @@ knitr::opts_chunk$set(echo = TRUE)
 library(mvtnorm)
 ```
 
+### sample difference
+
+
+### estimand
+
+maybe do a sample level predictor
+
 ## One outcome/ One predictor
 
 Assume we have $p$ covariates, $(X_{jt}$ $j=1,\ldots,p$, $t=0,1)$ , measured before $A_0$ ($t=0$) and also before $A_1$ ($t=1$). Suppose that treatment decisions depend on all covariates and direct effects of treatment on each covariate are unknown. Each element of $X_{jt}$ is sampled from a normal distribution.
@@ -67,13 +74,16 @@ dat = data.frame(Z1, Z2, X1, X2, A1, A2, Y)
 
 sample.new = function(theta.old, gamma.old, beta.old, sigsq.old, design, resp) {
   
+    p = ncol(design)
+  
   # sample new theta
   # assumpion: U(0,1) prior on theta/ binomial distribution on gamma (beta - binomial)
-  theta.new = rbeta(1, shape1 = sum(gamma.old) + 1  ,shape2 = p - sum(gamma.old) + 1)
   
+  theta.new = rbeta(1, shape1 = sum(gamma.old) + 1  ,shape2 = p - sum(gamma.old) + 1)
+
   # sample new gamma 
   # assumption: independent elements, fixed nu_0, nu_1
-  p = ncol(design)
+
   pg = rep(0,p) # hold the gamma probabilities
   
   for(pred in 1:p) {
@@ -109,15 +119,20 @@ sample.new = function(theta.old, gamma.old, beta.old, sigsq.old, design, resp) {
 
 ```{r mcmc over structure}
 
+set.seed(2)
 nIter = 1000
 
 nu_1 = 5
 nu_0 = 0.2
 
+p = 2
+pY = 4
+
 # array of parameters for each intermediate variable
 # theta (1)/ gamma (p)/ beta (p)/ sigsq (1)
 
-params = array(.1, dim = c(2, nIter, 1 + p + p + 1))
+params = array(.1, dim = c(2, nIter, 2 * p + 2)) # intermediate variables
+paramsY = array(.1, dim = c(nIter, 2 * pY + 2))
 
 
 for(it in 2:nIter) {
@@ -151,9 +166,152 @@ for(it in 2:nIter) {
   params[2, it, (p+2):(2*p+1)] = new.params$beta.new
   params[2, it, 2*p+2] = new.params$sigsq.new
   
+  ############## sample Y's #######################
+  pY = 4
+  new.params = sample.new(theta.old = paramsY[it-1, 1],
+                      gamma.old = paramsY[it-1, 2:(pY+1)],
+                      beta.old = paramsY[it-1, (pY+2):(2*pY+1)],
+                      sigsq.old = paramsY[it-1, 2*pY+2],
+                      design = cbind(X2, Z2, A1, A2),
+                      resp = Y)
+  
+  paramsY[it, 1] = new.params$theta.new
+  paramsY[it, 2:(pY+1)] = new.params$gamma.new
+  paramsY[it, (pY+2):(2*pY+1)] = new.params$beta.new
+  paramsY[it, 2*pY+2] = new.params$sigsq.new
+  
 }
 
+#library(rstanarm)
+#ymod = stan_glm(Y ~ A2 + X2, family = gaussian(), data = dat)
+#yparams = as.matrix(ymod)
+
 ```
+
+
+```{r posterior predict ran}
+
+# TODO
+
+# completed data set based on a draw from the posterior
+
+# completed dataset for each set of parameters
+
+# augmented dataset
+dat$y11 = NA
+dat$y00 = NA
+dat$t1 = ifelse(dat$A1 == 1 & dat$A2 == 1, 1, 0)
+dat$t0 = ifelse(dat$A1 == 0 & dat$A2 == 0, 1, 0)
+
+# first, let's do this with the correct G
+row = 100
+ndraws = 500
+
+diffs = array(0, dim = ndraws)
+
+
+for(draw in 1:ndraws) {
+  
+  if ( TRUE ) { # if there is an edge from treatment to covariate, impute/params[1, row + draw, 3] == 1
+  
+    mx1 = cbind(dat$X1, 1) %*% params[1, row + draw, c(4,5)]  # XB (treated at time 1)
+    X2draw1 = rnorm(n, mean = mx1, sd = params[1, row + draw, 6]) # fixed treatment to 1
+    
+    mx0 = cbind(dat$X1, 0) %*% params[1, row + draw, c(4,5)]  # XB (treated at time 1)
+    X2draw0 = rnorm(n, mean = mx0, sd = params[1, row + draw, 6]) # fixed treatment to 1
+
+  
+  } else { X2draw = dat$X2 }
+  
+  X2draw1 = ifelse(dat$A1 == 1, dat$X2, X2draw1)
+  X2draw0 = ifelse(dat$A1 == 0, dat$X2, X2draw0)
+  
+  my1 = cbind(X2draw1, dat$Z2, 1, 1) %*% paramsY[(row+draw),c(6:9)] # always treated
+  Ydraw1 = rnorm(n, mean = my1, sd = paramsY[(row+draw), 10])
+  
+  my0 = cbind(X2draw0, dat$Z2, 1, 1) %*% paramsY[(row+draw),c(6:9)] # always treated
+  Ydraw0 = rnorm(n, mean = my0, sd = paramsY[(row+draw), 10])
+
+  
+  dat$y11 = ifelse(dat$t1 == 1, dat$Y, Ydraw1)
+  dat$y00 = ifelse(dat$t0 == 1, dat$Y, Ydraw0)
+  
+  diffs[draw] = sum(dat$y11 - dat$y00)/n
+  
+  
+}
+
+
+hist(diffs)
+
+#ggplot(Ydraw, aes(x = Y, group = nrep)) + geom_density(color = "blue") + 
+#  theme_minimal() 
+```
+
+
+
+
+
+
+```{r posterior predict fixed}
+
+# TODO
+# y_11 based on the correct graph - check
+# then sample the graph as well
+
+# draw 1: row 100 of params
+
+
+
+row = 100
+ndraws = 10
+ppY = (array(0, dim = c(ndraws, n)))
+#ppY$nrep = 1:ndraws
+#j = ppY %>% pivot_longer(!it)
+ 
+for(draw in 1:ndraws) {
+  
+  mx = cbind(dat$X2, 1) %*% params[1, row + draw, c(4,5)]  # XB
+  X2draw = rnorm(n, mean = mx, sd = params[1, row, 6]) # fixed treatment to 1
+  
+  my = cbind(1, 1, X2draw) %*% yparams[(row+draw),1:3]
+  Ydraw = rnorm(n, mean = my, sd = yparams[(row+draw), 4])
+  ppY[draw,] = Ydraw
+  
+}
+
+
+
+Ydraw = data.frame(Y = array(t(ppY)),
+                     nrep = rep(1:ndraws, each = n) )
+
+ggplot(Ydraw, aes(x = Y, group = nrep)) + geom_density(aes(color = "blue")) + 
+  theme_minimal() 
+
+# now, let the graph be sampled
+
+
+#ggplot(plot.df, aes(x = Y, group = nrep)) + geom_density(aes(color=int)) + 
+#  theme_minimal() + theme(legend.position = "none") + scale_colour_manual(values=cbp1) + 
+#  ggtitle(TeX("Distribution of $Y^{00}$ (Blue) and $Y^{11}$ (Green) under $G_1$")) +
+#  ylab(TeX("p($y^g | Data, G_1$)")) + xlim(-15,15) + 
+#  geom_vline(xintercept = c(ey00,ey11), color = cbp1[1:2])
+
+#ifelse(params[1, row, 3] == 1, draws, X)
+
+
+AtoX =  # direct effect from treatment
+if(AtoX == 1) {
+  # if the edge exists, then sample a (counterfactual) covariate from posterior predictive X2
+
+  
+}
+
+
+```
+
+
+
 
 
 ```{r}
@@ -163,6 +321,9 @@ gams %>% group_by(X1, X2) %>% summarise(n=n()) %>% arrange(desc(n))
 
 
 ```{r}
+
+# 1. likely structures
+# 2. 
 
 # tweak this to take multiple predictors (or one)
 
