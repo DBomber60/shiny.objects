@@ -14,14 +14,19 @@ library(knitr)
 
 ### Simulation Setup - General
 
-Assume we have measurements of binary treatment taken at two times, $(A_1, A_2)$, covariates $(X_t, Z_t)$ measured over time (before $A_1$ and before $A_2$), and a final continuous outcome $Y$ measured at the end of the study. We want to assess the effect of the sequential treatment. We assume that the covariates and outcome are correlated due to unmeasured common causes of each, denoted by $u$. However, that the causal structure of the variables is unknown. In particular, we do not know whether treatment has a direct effect on the intermediate outcomes. We also don't know which variables have a direct effect on the outcome. Therefore, we aim to incorporate the uncertainty in the causal structure into our estimation.
+Assume we have measurements of a binary treatment taken at two times, $(A_1, A_2)$, covariates $(X_t, Z_t)$ measured over time (before $A_1$ and before $A_2$), and a final continuous outcome $Y$ measured at the end of the study. We want to assess the effect of the sequential treatment. We assume that the covariates and outcome are correlated due to unmeasured common causes of each, denoted by $u$. However, the causal structure of the variables is unknown. In particular, we do not know whether treatment has a direct effect on the intermediate outcomes. Also unknown is the set of variables that have a direct effect on the outcome. Therefore, we aim to incorporate the uncertainty in the causal structure into our estimation.
 
 ### Simulation Setup - Specific
 
 \begin{align}
-
+u_i &\sim N(0,1) \\
+x_{1i}, z_{1i} &\sim N(0,1) \\
+\text{logit} ( P(a_{1i} = 1 \vert x_{1i}, z_{1i}) ) &= x_{1i}+z_{1i} \\
+x_{2i} \vert a_{1i}, x_{1i} &\sim N(0.7x_{1i} - a_{1i} + u_i, 1) \\
+z_{2i} \vert a_{1i}, z_{1i} &\sim N(0.8z_{1i} + u_i, 1) \\
+\text{logit} ( P(a_{2i} = 1 \vert x_{2i}, z_{2i}) &= x_{2i}+z_{2i} \\
+y_{i} \vert \cdot &\sim N(0.7x_{2i} - a_{2i} + u_i, 1)
 \end{align}
-Assume we have $p$ covariates, $(X_{jt}$ $j=1,\ldots,p$, $t=0,1)$ , measured before $A_0$ ($t=0$) and also before $A_1$ ($t=1$). Suppose that treatment decisions depend on all covariates and direct effects of treatment on each covariate are unknown. Each element of $X_{jt}$ is sampled from a normal distribution.
 
 
 ### Causal Effect Definition
@@ -29,14 +34,13 @@ Assume we have $p$ covariates, $(X_{jt}$ $j=1,\ldots,p$, $t=0,1)$ , measured bef
 We aim to estimate the effect of treatment strategy $g^\prime = (1,1)$ versus treatment strategy $g=(0,0)$ using the sample average treatment effect,
 
 \begin{align}
-\phi(g^\prime, g) = \frac{1}{N} \sum_{i=1}^N \bigg(Y_i^{g^\prime} - Y_i^{g} \bigg)
+\phi(g^\prime, g) = \frac{1}{N} \sum_{i=1}^N \bigg(Y_i^{g^\prime} - Y_i^{g} \bigg).
 \end{align}
-
-where $\phi$ is generated using the posterior predictive distribution.
 
 
 ### Model Assumptions
 
+Each variable that we model is normal and for each we use the following assumptions (simplest case of spike + slab). Under our assumptions, we equate the elements of $\boldsymbol{\gamma}$ with the existence of edges in the causal graph. In the setup described below, we use $\mathbf{y,X}$ to generically deonte a response vector and design matrix. We aim to sample from the joint posterior, $p(\theta, \gamma, \beta, \sigma^2 \vert \textbf{Data})$. We do so under the following prior assumptions,
 
 \begin{align}
 \sigma^2 &\sim \text{IG}(1/2,1/2) \\
@@ -46,7 +50,7 @@ p(\beta_i \vert \gamma_i) &= \gamma_i \mathcal{ N}(0,\nu_1) + (1-\gamma_i)\mathc
 p(\mathbf{y} \vert \boldsymbol{\beta}, \mathbf{X}) &= \mathcal{N}(\mathbf{X} \beta, \sigma^2 \mathbf{I}) \\
 \end{align}
 
-$$p(\theta, \gamma, \beta, \sigma^2 \vert \textbf{Data})$$
+Which allow a simple gibbs sampling algorithm in which the conditional distributions are,
 
 \begin{align}
 p(\theta \vert \gamma) &\sim \text{Beta}(\sum_i \gamma_i + 1, p - \sum_i \gamma_i + 1) \\
@@ -91,7 +95,7 @@ sample.new = function(theta.old, gamma.old, beta.old, sigsq.old, design, resp) {
   
   p = ncol(design)
   # sample new theta
-  # assumpion: U(0,1) prior on theta/ binomial distribution on gamma (beta - binomial)
+  # assumption: U(0,1) prior on theta/ binomial distribution on gamma (beta - binomial)
   
   theta.new = rbeta(1, shape1 = sum(gamma.old) + 1  ,shape2 = p - sum(gamma.old) + 1)
 
@@ -221,8 +225,9 @@ kable(a[1:10, -9])
 
 ```
 
+Rows of this table represent causal graphs, used as input for the g-gformula to estimate $\phi$. Each column corresponds with an edge where the first variable is the source node. The first column corresponds with the existence of the $X1 \rightarrow X2$ edge.
 
-
+### Posterior distribution of $\phi$
 
 ```{r}
 # completed dataset for each set of parameters
@@ -306,7 +311,7 @@ d.random = data.frame(diffs = diffs, g = "ran" )
 ```
 
 
-```{r posterior predict ran}
+```{r}
 
 # augmented dataset
 dat$y11 = NA
@@ -352,7 +357,7 @@ for(draw in 1:ndraws) {
 }
 
 
-hist(diffs)
+#hist(diffs)
 
 d.fixed = data.frame(diffs, g = "fixed")
 d.ran2 = rbind(d.random, d.fixed)
@@ -362,11 +367,12 @@ ggplot(d.ran2, aes(x = diffs, fill = g)) + geom_density(aes(color = g, alpha = 0
 
 ```
 
+This plot shows the distribution of $\phi$ when a a fixed graph is used (red) and when the graph is sampled (green). Since $\phi$ is sensitive to the assumed causal graph, this distribution is multi-modal.
 
 
-open questions
+### Open questions
 - multiple time points "rules"
-- good choice of hyperparameters
+- good choice of hyperparameters ($\nu_0, \nu_1$)
 
 
 
